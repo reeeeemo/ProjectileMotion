@@ -134,13 +134,13 @@ class Projectile:
     def plot(self, fig, ax):
         """Plot the most recent trajectory."""
         x, y = self.xy
-        heading = self.heading
+        #heading = self.heading
         ax.clear()
         xpad = max(0.05 * (x.max() - x.min()), 1.0)
         ypad = max(0.1 * (y.max() - y.min()), 1.0)
         ax.set_xlim(x.min() - xpad, x.max() + xpad)
         ax.set_ylim(min(0, y.min()), y.max() + ypad)
-        sx, sy = ax.transData.transform([1, 1]) - ax.transData.transform([0, 0])
+        #sx, sy = ax.transData.transform([1, 1]) - ax.transData.transform([0, 0])
 
         ax.plot(x, y)
         ax.scatter(x[0], y[0], c='green')
@@ -150,22 +150,21 @@ class Projectile:
         step = max(len(x) // 15, 1)  # every 15 intervals
         L = 20
 
-        for xi, yi, h in zip(x[::step], y[::step], heading[::step]):
-            h_screen = np.arctan2(np.sin(h) * sy, np.cos(h) * sx)
-            dx, dy = L * np.cos(h_screen) / sx, L * np.sin(h_screen) / sy
-            ax.annotate(
-                "", xy=(xi + dx, yi + dy), xytext=(xi - dx, yi - dy), annotation_clip=False,
-                arrowprops=dict(arrowstyle="-|>", color="k", lw=0.5)
-            )
-            ax.annotate(
-                f"{np.degrees(h):.0f}°", xy=(xi, yi), xycoords="data", xytext=(4, 6),
-                textcoords="offset points", fontsize=8
-            )
+        #for xi, yi, h in zip(x[::step], y[::step], heading[::step]):
+            #h_screen = np.arctan2(np.sin(h) * sy, np.cos(h) * sx)
+            #dx, dy = L * np.cos(h_screen) / sx, L * np.sin(h_screen) / sy
+            #ax.annotate(
+            #    "", xy=(xi + dx, yi + dy), xytext=(xi - dx, yi - dy), annotation_clip=False,
+            #    arrowprops=dict(arrowstyle="-|>", color="k", lw=0.5)
+            #)
+            #ax.annotate(
+            #    f"{np.degrees(h):.0f}°", xy=(xi, yi), xycoords="data", xytext=(4, 6),
+            #    textcoords="offset points", fontsize=8
+            #)
 
-        fig.suptitle("Projectile Motion")
         ax.set_ylabel("Height (m)")
         ax.set_xlabel("Distance (m)")
-        ax.grid(True)
+        #ax.grid(True)
         return fig
 
     @property

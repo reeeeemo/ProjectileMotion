@@ -1,85 +1,116 @@
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button, TextBox, CheckButtons
+import matplotlib
+matplotlib.use("QtAgg")
+
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+
+from PyQt6 import QtCore, QtWidgets, QtGui
 from projectile import Projectile
 import numpy as np
 
-class Screen:
-    """Interactive GUI for displaying 2D Projectile Motion.
-    
-    
-    """
-    def __init__(self, proj: Projectile):
-        self.fig = plt.figure(figsize=(10,7))
-        self.ax = self.fig.add_axes([0.06, 0.45, 0.6, 0.5])
-        self.proj = proj
+SCALE = 1000  # 0.001 is 1 tick
 
-        ### setup table + error toggle ###
-        self.table = self.fig.text(
-            0.7, 0.95, "", va="top", family="monospace", fontsize=9,
-            bbox=dict(boxstyle="round,pad=0.6", facecolor="#f7f7f7", edgecolor="gray")
+class Screen(QtWidgets.QMainWindow):
+    """Interactive GUI for displaying 2D Projectile Motion.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setWindowTitle("Projectile Motion")
+
+        ### setup figure and main classes for config ###
+        self.fig = Figure(figsize=(8,5), layout="constrained")
+        self.canvas = FigureCanvasQTAgg(self.fig)
+        self.ax = self.fig.add_subplot()
+        self.proj = Projectile(
+            gravity=9.81,
+            dtype=np.float32,
+            deltatime=0.01,
+            wind=np.array([0.0, 0.0], dtype=np.float32)
         )
-        self.check = CheckButtons(self.fig.add_axes([0.78, 0.26, 0.18, 0.06]), ["Show +/-% spread"])
 
         ### inputs: slider and text box per val ###
         inputs = [
-            ("C_drag", "C (drag coef)", 0.0, 2.0, proj.C_drag),
-            ("rho", "p (kg/m^3)", 0.0, 3.0, proj.rho),
-            ("init_vel", "Speed (m/s)", 0.0, 100.0, proj.init_vel),
-            ("m", "Mass (kg)", 1.0, 20.0, proj.m),
-            ("launch_angle", "Angle (°)", -90.0, 90.0, proj.launch_angle),
-            ("init_altitude", "Altitude (m)", 0.0, 200.0, proj.init_altitude),
+            ("C_drag", "C (drag coef)", 0.0, 2.0, self.proj.C_drag),
+            ("rho", "p (kg/m^3)", 0.0, 3.0, self.proj.rho),
+            ("init_vel", "Speed (m/s)", 0.0, 100.0, self.proj.init_vel),
+            ("m", "Mass (kg)", 1.0, 20.0, self.proj.m),
+            ("launch_angle", "Angle (°)", -90.0, 90.0, self.proj.launch_angle),
+            ("init_altitude", "Altitude (m)", 0.0, 100.0, self.proj.init_altitude),
             ("spread", "+/-% speed", 0.0, 50.0, 10.0),
         ]
-        self.sliders, self.boxes = {}, {}
+
+        grid = QtWidgets.QGridLayout()
+        self.sliders, self.boxes, self.defaults = {}, {}, {}
         for row, (key, lbl, lo, hi, init) in enumerate(inputs):
-            y0 = 0.33 - row * 0.045
-            s = Slider(self.fig.add_axes([0.14, y0, 0.25, 0.03]), lbl, lo, hi, valinit=init)
-            s.valtext.set_visible(False)
-            tb = TextBox(self.fig.add_axes([0.61, y0, 0.08, 0.03]), "", initial=f"{init:.3f}")
-            self.sliders[key], self.boxes[key] = s, tb
-            self.sliders[key].on_changed(self._on_slider(key))
-            self.boxes[key].on_submit(self._on_text(key))
-        self.check.on_clicked(lambda _: self._refresh())
+            s = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+            s.setRange(round(lo * SCALE), round(hi * SCALE))
+            s.setValue(round(init * SCALE))
 
-        ### setup reset button ###
-        reset_btn = Button(self.fig.add_axes([0.85, 0.06, 0.1, 0.04]), "Reset")
-        reset_btn.on_clicked(self._reset)
+            box = QtWidgets.QDoubleSpinBox()
+            box.setDecimals(3)
+            box.setRange(lo, hi)
+            box.setValue(init)
 
-    def run(self):
+            s.valueChanged.connect(lambda v, b=box: b.setValue(v / SCALE))
+            box.valueChanged.connect(lambda v, sl=s: sl.setValue(round(v * SCALE)))
+            s.sliderReleased.connect(self._refresh)
+            box.editingFinished.connect(self._refresh)
+
+            grid.addWidget(QtWidgets.QLabel(lbl), row, 0)
+            grid.addWidget(s, row, 1)
+            grid.addWidget(box, row, 2)
+            self.sliders[key], self.boxes[key], self.defaults[key] = s, box, init
+
+        ### add std-dev checkboxes ###
+        checks_row = QtWidgets.QHBoxLayout()
+        checks_row.addWidget(QtWidgets.QLabel("Applies:"))
+        self.checks = {}
+        for key, lbl in [("rho", "p"), ("init_altitude", "Altitude"), ("init_vel", "Speed"), ("launch_angle", "Angle")]:
+            cb = QtWidgets.QCheckBox(lbl)
+            checks_row.addWidget(cb)
+            self.checks[key] = cb
+        checks_row.addStretch()
+
+        ### add console for variable output ###
+        self.table = QtWidgets.QLabel()
+        self.table.setFont(QtGui.QFont("Consolas", 9))
+        self.table.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        self.table.setStyleSheet("background:#f7f7f7; border:1px solid gray; padding:8px; color:black")
+
+        ### buttons and formatting with widgets ###
+        plot_btn = QtWidgets.QPushButton("Plot")
+        plot_btn.clicked.connect(self._refresh)
+        reset_btn = QtWidgets.QPushButton("Reset")
+        reset_btn.clicked.connect(self._reset)
+
+        top = QtWidgets.QHBoxLayout()
+        top.addWidget(self.canvas, stretch=3)
+        top.addWidget(self.table, stretch=1)
+
+        buttons = QtWidgets.QVBoxLayout()
+        buttons.addWidget(plot_btn)
+        buttons.addWidget(reset_btn)
+        buttons.addStretch()
+
+        bottom = QtWidgets.QHBoxLayout()
+        bottom.addLayout(grid, stretch=1)
+        bottom.addLayout(buttons)
+
+        root = QtWidgets.QVBoxLayout()
+        root.addLayout(top, stretch=1)
+        root.addLayout(bottom)
+        root.addLayout(checks_row)
+
+        central = QtWidgets.QWidget()
+        central.setLayout(root)
+        self.setCentralWidget(central)
+
         self._refresh()
-        plt.show()
-    
-    def _set_box(self, k, v):
-        tb = self.boxes[k]
-        tb.eventson = False
-        tb.set_val(f"{v:.3f}")
-        tb.eventson = True
-
-    def _on_slider(self, k):
-        def cb(v):
-            self._set_box(k, v)
-            self._refresh()
-        return cb
-
-    def _on_text(self, k):
-        """Update textbox value with new user-inputted value if correct."""
-        def cb(txt):
-            s = self.sliders[k]
-            try:
-                val = float(txt)
-            except ValueError:
-                self._set_box(k, s.val)
-                return
-            s.set_val(float(np.clip(round(val, 3), s.valmin, s.valmax)))
-        return cb
 
     def _reset(self, _):
-        for k, s in self.sliders.items():
-            s.eventson = False
-            s.reset()
-            s.eventson = True
-            self._set_box(k, s.val)
-        self._refresh()
+        """Set all boxes/sliders back to default."""
+        for k, b in self.boxes.items():
+            b.setValue(self.defaults[k])
 
     def _run(self, proj, **overrides):
         """Run one simulation with temp parameters (flight_time, distance_x)."""
@@ -94,22 +125,22 @@ class Screen:
             setattr(proj, k, v)
         return result
 
-    def _refresh(self):
+    def _refresh(self, *_):
         """Recompute using all sliders.
         
             Runs a no-drag version for info. Additionally run a 9-simulation spread from -x% to +x%.
             Runs nominal simulation last.
         """
-        for key, s in self.sliders.items():
-            if key != "spread":
-                setattr(self.proj, key, round(s.val, 3))
+        for k, b in self.boxes.items():
+            if k != "spread":
+                setattr(self.proj, k, round(b.value(), 3))
 
         t_nd, d_nd = self._run(self.proj, C_drag=0.0)
 
         # simulation spread
         spread_lines = []
-        if self.check.get_status()[0]:
-            pct = self.sliders["spread"].val
+        if any(cb.isChecked() for cb in self.checks.values()):
+            pct = self.boxes["spread"].value()
             v0 = self.proj.init_vel
             speeds = np.linspace(v0 * (1 - pct / 100), v0 * (1 + pct / 100), 9)  # -x% to +x%
             samples = np.array([self._run(self.proj, init_vel=v) for v in speeds])
@@ -131,26 +162,26 @@ class Screen:
             "OUTPUTS",
             "-" * 38,
             "DRAG",
-            f"Flight time   :   {t_d:10.3f}s",
-            f"Distance x    :   {d_d:10.3f}m"
+            f"Flight time: {t_d:10.3f}s",
+            f"Horizontal Distance: {d_d:10.3f}m"
         ]
         for item in spread_lines:
             if item[0] == "lo":
-                lines.append(f"Distance -{item[1]:.0f}% v    :   {item[2]:10.3f}m ({pct_diff(item[2]):+.1f}%)")
+                lines.append(f"Distance -{item[1]:.0f}% : {item[2]:10.3f}m ({pct_diff(item[2]):+.1f}%)")
             elif item[0] == "hi":
-                lines.append(f"Distance +{item[1]:.0f}% v   :   {item[2]:10.3f}m ({pct_diff(item[2]):+.1f}%)")
+                lines.append(f"Distance +{item[1]:.0f}% : {item[2]:10.3f}m ({pct_diff(item[2]):+.1f}%)")
             elif item[0] == "span":
-                lines.append(f" Range -x%..+x%    :   {item[2] - item[1]:10.3f}m")
+                lines.append(f" Range -x% - +x%: {item[2] - item[1]:10.3f}m")
             elif item[0] == "std":
-                lines.append(f" Std-dev distance    :   {item[1]:10.3f} m")
-                lines.append(f" Std-dev time    :    {item[2]:10.3f} s")
+                lines.append(f" Std-dev distance: {item[1]:10.3f} m")
+                lines.append(f" Std-dev time: {item[2]:10.3f} s")
         lines += [
             "",
             "NO DRAG",
             f"Flight time   :   {t_nd:10.3f}s",
             f"Distance x    :   {d_nd:1.3f}m"
         ]
-        self.table.set_text("\n".join(lines))
+        self.table.setText("\n".join(lines))
 
         self.proj.plot(self.fig, self.ax)
-        self.fig.canvas.draw_idle()
+        self.canvas.draw_idle()
