@@ -1,11 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter
 import uuid
 from pathlib import Path
-
-SAVE_PATH = Path("./figures/")
-SAVE_PATH.mkdir(parents=True, exist_ok=True)
 
 class Projectile:
     """2D Projectile Motion calculator.
@@ -13,7 +9,7 @@ class Projectile:
         Parameters
         ----------
         gravity : float
-            Gravity in m/s
+            Gravity in m/s^2
         dtype : type
             Precision value to use for calculations
         deltatime : float
@@ -24,7 +20,7 @@ class Projectile:
         Attributes
         ----------
         _g : float
-            Gravity in m/s
+            Gravity in m/s^2
         _dtype : type
             Precision value to use for calculations
         _dt : float
@@ -47,10 +43,18 @@ class Projectile:
             Initial altitude of launched object
         init_vel : float
             Initial velocity of launched object
-        launch_angle : int
+        launch_angle : float
             Initial launched angle of object in degrees
         max_time : int
             Time frame to drop object before early cutoff
+        xy : np.ndarray
+            Current XY displacement points after a trajectory
+        heading : np.ndarray
+            Current heading per timestep after a trajectory
+        t : np.ndarray
+            Array of all timesteps to fit deltatime
+        elapsed : int
+            Elapsed timesteps of a trajectory run
     """
     def __init__(
             self, 
@@ -59,46 +63,46 @@ class Projectile:
             deltatime: float = 0.01, 
             wind: np.ndarray = None,
          ):
-        # projectile constants
+        ### projectile constants ###
         self._g = gravity
         self._dtype = dtype
         self._dt = deltatime
         self._wind = wind if wind is not None else np.zeros(2, dtype=self._dtype)
         
-        # projectile changeable vars
+        ### projectile changeable vars ###
         self.m = 5.0
         self.rho = 1.225
         self.C_drag = 0.5
-        self.l = 2.0  # length
-        self.h = 0.5  # height 
-        self.w = 1.0  # width
+        self.l = 2.0
+        self.h = 0.5
+        self.w = 1.0
 
         self.init_altitude = 50.0
         self.init_vel = 20.0
-        self.launch_angle = 30
-        self.max_time = 30
+        self.launch_angle = 30.0
+        self.max_time = 1000
+
+        ### per-iteration variables to output ###
+        self.max_time_scaled = max(int(np.ceil(self.max_time / self._dt)) + 1, 2)
+        self._xy = np.zeros((self.max_time_scaled, 2), dtype=self._dtype)
+        self._heading = np.zeros(self.max_time_scaled, dtype=self._dtype)
+        self.t = np.arange(self.max_time_scaled, dtype=self._dtype) * self._dt
+        self.elapsed = 0
 
     def trajectory(self):
-        """Return the points on a path following projectile motion in 2D.
-
-                Returns:
-                (x, y) points on a projectile path 
-        """
+        """Compute a projectile motion calculation in 2D with drag."""
         ### v0x = v0 * cos0 || v0y = v0 * sin0 ###
         theta = np.radians(self.launch_angle)
         vx, vy = self.init_vel * np.cos(theta), self.init_vel * np.sin(theta)
 
         ### allocate memory for all variables for euler dynamics ###
-        n = max(int(np.ceil(self.max_time / self._dt)) + 1, 2)
-        x, y = np.zeros(n, dtype=self._dtype), np.zeros(n, dtype=self._dtype)
-        heading = np.zeros(n, dtype=self._dtype)
-        t = np.zeros(n, dtype=self._dtype)
 
-        x[0], y[0], heading[0] = 0.0, self.init_altitude, theta
-        px, py, i = 0.0, self.init_altitude, 1
+        self._xy[0, :] = (0.0, self.init_altitude)
+        self._heading[0] = theta
+        px, py, self.elapsed = 0.0, self.init_altitude, 1
 
         ### semi-implicit euler dynamics for 2d projectile motion ###
-        while py >= 0.0 and i < n - 1:  
+        while py >= 0.0 and self.elapsed < self.t.shape[0] - 1:  
             # compute exposed surface area based on current heading
             cos_theta = np.abs(np.cos(theta))
             sin_theta = np.abs(np.sin(theta))
@@ -122,38 +126,15 @@ class Projectile:
             px += vx * self._dt
             py += vy * self._dt
 
-            x[i] = px
-            y[i] = py
+            self._xy[self.elapsed, :] = (px, py)
             theta = np.arctan2(vy, vx)
-            heading[i] = theta.copy()
-            t[i] = i * self._dt
-            i += 1
-        return x[:i], y[:i], heading[:i]
+            self._heading[self.elapsed] = theta.copy()
+            self.elapsed += 1
 
-    def plot(self, fig, ax, x, y, heading):
-        """Plot and save a given trajectory."""
-        #id_ = uuid.uuid4()
-
-        ### plot animation ###
-        #fig, ax = plt.subplots()
-
-        #ax.set_xlim(0, x.max() * 1.05)
-        #ax.set_ylim(0, y.max() * 1.05)
-        #path, = ax.plot([], [], "b-")
-        #ball, = ax.plot([], [], "ro")
-
-        #def update(i):
-        #    """Callback to set array for animation."""
-        #    path.set_data(x[:i+1], y[:i+1])
-        #    ball.set_data([x[i]], [y[i]])
-        #    return path, ball
-
-        #anim = FuncAnimation(fig, update, frames=len(x), interval=20)
-        #anim.save(str(SAVE_PATH / f"{str(id_)}_projectile.gif"), writer=PillowWriter(fps=50))
-
-        ### plot static image ###
-        #ratio = (y.max() - y.min()) / (x.max() - x.min())
-        #fig, ax = plt.subplots(figsize=(10, np.clip(10 * ratio, 4.5, 8)))
+    def plot(self, fig, ax):
+        """Plot the most recent trajectory."""
+        x, y = self.xy
+        heading = self.heading
         ax.clear()
         xpad = max(0.05 * (x.max() - x.min()), 1.0)
         ypad = max(0.1 * (y.max() - y.min()), 1.0)
@@ -174,7 +155,7 @@ class Projectile:
             dx, dy = L * np.cos(h_screen) / sx, L * np.sin(h_screen) / sy
             ax.annotate(
                 "", xy=(xi + dx, yi + dy), xytext=(xi - dx, yi - dy), annotation_clip=False,
-                arrowprops=dict(arrowstyle="-|>", color="k", lw=3)
+                arrowprops=dict(arrowstyle="-|>", color="k", lw=0.5)
             )
             ax.annotate(
                 f"{np.degrees(h):.0f}°", xy=(xi, yi), xycoords="data", xytext=(4, 6),
@@ -186,19 +167,15 @@ class Projectile:
         ax.set_xlabel("Distance (m)")
         ax.grid(True)
         return fig
-        #fig.savefig(str(SAVE_PATH / f"{str(id_)}_projectile.png"))
 
+    @property
+    def flight_time(self):
+        return self.t[self.elapsed - 1]
 
-#### MAIN FUNCTION ####
-if __name__ == "__main__":
-    proj = Projectile(
-        gravity=9.81,
-        dtype=np.float32,
-        deltatime=0.01,
-        wind=np.array([0.0, 0.0]),
-    )
-    x, y, h = proj.trajectory(
-        init_vel=30.0, 
-        launch_angle=25.0
-    )
-    proj.plot(x, y, h)
+    @property
+    def xy(self):
+        return self._xy[:self.elapsed].T
+
+    @property
+    def heading(self):
+        return self._heading[:self.elapsed]
