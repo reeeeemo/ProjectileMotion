@@ -96,7 +96,6 @@ class Projectile:
         vx, vy = self.init_vel * np.cos(theta), self.init_vel * np.sin(theta)
 
         ### allocate memory for all variables for euler dynamics ###
-
         self._xy[0, :] = (0.0, self.init_altitude)
         self._heading[0] = theta
         px, py, self.elapsed = 0.0, self.init_altitude, 1
@@ -131,40 +130,28 @@ class Projectile:
             self._heading[self.elapsed] = theta.copy()
             self.elapsed += 1
 
-    def plot(self, fig, ax):
+    def plot(
+            self, 
+            fig, 
+            ax, 
+            clear: bool = True, 
+            linestyle: str = "solid"
+         ):
         """Plot the most recent trajectory."""
         x, y = self.xy
-        #heading = self.heading
-        ax.clear()
-        xpad = max(0.05 * (x.max() - x.min()), 1.0)
-        ypad = max(0.1 * (y.max() - y.min()), 1.0)
-        ax.set_xlim(x.min() - xpad, x.max() + xpad)
-        ax.set_ylim(min(0, y.min()), y.max() + ypad)
-        #sx, sy = ax.transData.transform([1, 1]) - ax.transData.transform([0, 0])
+        if clear: 
+            ax.clear()
+            xpad = max(0.05 * (x.max() - x.min()), 1.0)
+            ypad = max(0.1 * (y.max() - y.min()), 1.0)
+            ax.set_xlim(x.min() - xpad, x.max() + xpad)
+            ax.set_ylim(min(0, y.min()), y.max() + ypad)
 
-        ax.plot(x, y)
+        ax.plot(x, y, linestyle=linestyle)
         ax.scatter(x[0], y[0], c='green')
         ax.scatter(x[-1], y[-1], c='red')
 
-        # plot heading angle at each interval
-        step = max(len(x) // 15, 1)  # every 15 intervals
-        L = 20
-
-        #for xi, yi, h in zip(x[::step], y[::step], heading[::step]):
-            #h_screen = np.arctan2(np.sin(h) * sy, np.cos(h) * sx)
-            #dx, dy = L * np.cos(h_screen) / sx, L * np.sin(h_screen) / sy
-            #ax.annotate(
-            #    "", xy=(xi + dx, yi + dy), xytext=(xi - dx, yi - dy), annotation_clip=False,
-            #    arrowprops=dict(arrowstyle="-|>", color="k", lw=0.5)
-            #)
-            #ax.annotate(
-            #    f"{np.degrees(h):.0f}°", xy=(xi, yi), xycoords="data", xytext=(4, 6),
-            #    textcoords="offset points", fontsize=8
-            #)
-
         ax.set_ylabel("Height (m)")
         ax.set_xlabel("Distance (m)")
-        #ax.grid(True)
         return fig
 
     @property

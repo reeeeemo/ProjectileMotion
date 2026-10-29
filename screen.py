@@ -69,6 +69,7 @@ class Screen(QtWidgets.QMainWindow):
             cb = QtWidgets.QCheckBox(lbl)
             checks_row.addWidget(cb)
             self.checks[key] = cb
+            self.checks[key].checkStateChanged.connect(self._refresh)
         checks_row.addStretch()
 
         ### add console for variable output ###
@@ -113,14 +114,13 @@ class Screen(QtWidgets.QMainWindow):
             b.setValue(self.defaults[k])
 
     def _run(self, proj, **overrides):
-        """Run one simulation with temp parameters (flight_time, distance_x)."""
+        """Run one simulation with temp parameters (flight_time, (x,y) coords)."""
         saved = {k: getattr(proj, k) for k in overrides}
         for k, v in overrides.items():
             setattr(proj, k, v)
 
         proj.trajectory()
-        x, _ = proj.xy
-        result = (proj.flight_time, x[-1])
+        result = (proj.flight_time, proj.xy.copy())
         for k, v in saved.items():
             setattr(proj, k, v)
         return result
@@ -135,27 +135,38 @@ class Screen(QtWidgets.QMainWindow):
             if k != "spread":
                 setattr(self.proj, k, round(b.value(), 3))
 
-        t_nd, d_nd = self._run(self.proj, C_drag=0.0)
+        t_nd, xy = self._run(self.proj, C_drag=0.0)
+        d_nd = xy[0, -1]
+        self.proj.plot(self.fig, self.ax, clear=True, linestyle="dotted")
 
         # simulation spread
         spread_lines = []
-        if any(cb.isChecked() for cb in self.checks.values()):
+        cb_checks = [key for key, cb in self.checks.items() if cb.isChecked()]
+        if len(cb_checks):
             pct = self.boxes["spread"].value()
-            v0 = self.proj.init_vel
-            speeds = np.linspace(v0 * (1 - pct / 100), v0 * (1 + pct / 100), 9)  # -x% to +x%
-            samples = np.array([self._run(self.proj, init_vel=v) for v in speeds])
-            times, dists = samples[:, 0], samples[:, 1]
+            attrs = [(a, getattr(self.proj, a)) for a in cb_checks]
+            factors = np.linspace(1 - pct / 100, 1 + pct / 100, 9)  # -x% to +x%
+            kwargs_list = [{a: v * f for a, v in attrs} for f in factors]
+            samples = [self._run(self.proj, **kw) for kw in kwargs_list]  # (N, (t, xy))
+            times = np.array([t for t, _ in samples])
+            xys = [xy for _, xy in samples] # (N, xy)
+            dists = np.array([xy[0, -1] for xy in xys])  # (dist,)
             spread_lines = [
                 ("lo", pct, dists[0]), ("hi", pct, dists[-1]),
                 ("span", dists[0], dists[-1]), ("std", dists.std(), times.std())
             ]
+
+            # plot sim spread
+            x_common = np.linspace(0, max(x.max() for x, _ in xys), 300)
+            ys = np.array([np.interp(x_common, x, y) for x, y in xys])
+            self.ax.fill_between(x_common, ys.min(axis=0), ys.max(axis=0), alpha=0.3)
 
         # nominal simulation
         self.proj.trajectory()
         t_d, d_d = self.proj.flight_time, self.proj.xy[0][-1]
 
         def pct_diff(d):
-            """Compute difference between given xy displacement and nominal xy displacement."""
+            """Compute difference (%) between given xy displacement and nominal xy displacement."""
             return 100 * (d - d_d) / d_d if abs(d_d) > 1e-9 else float("nan")
 
         lines = [
@@ -173,15 +184,15 @@ class Screen(QtWidgets.QMainWindow):
             elif item[0] == "span":
                 lines.append(f" Range -x% - +x%: {item[2] - item[1]:10.3f}m")
             elif item[0] == "std":
-                lines.append(f" Std-dev distance: {item[1]:10.3f} m")
-                lines.append(f" Std-dev time: {item[2]:10.3f} s")
+                lines.append(f" Std-dev distance: {item[1]:10.3f}m")
+                lines.append(f" Std-dev time: {item[2]:10.3f}s")
         lines += [
             "",
             "NO DRAG",
-            f"Flight time   :   {t_nd:10.3f}s",
-            f"Distance x    :   {d_nd:1.3f}m"
+            f"Flight time: {t_nd:10.3f}s",
+            f"Distance x: {d_nd:1.3f}m"
         ]
         self.table.setText("\n".join(lines))
 
-        self.proj.plot(self.fig, self.ax)
+        self.proj.plot(self.fig, self.ax, clear=False)
         self.canvas.draw_idle()
