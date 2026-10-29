@@ -3,6 +3,7 @@ matplotlib.use("QtAgg")
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
+from matplotlib.animation import FuncAnimation
 
 from PyQt6 import QtCore, QtWidgets, QtGui
 from projectile import Projectile
@@ -12,6 +13,31 @@ SCALE = 1000  # 0.001 is 1 tick
 
 class Screen(QtWidgets.QMainWindow):
     """Interactive GUI for displaying 2D Projectile Motion.
+
+    Inherits from QtWidgets.QMainWindow
+
+    Attributes
+    ----------
+    fig : Figure
+        Matplotlib grid for displaying trajectory plotting
+    canvas : FigureCanvasQTAgg
+        Wrapper for matplotlib grid to PyQt6
+    ax : Axes
+        Matplotlib ax to draw trajectories
+    proj : Projectile
+        Class to compute Projectile Motion
+    sliders : dict
+        All Slider bars
+    boxes : dict
+        All text boxes
+    defaults : dict
+        All default values to reset to
+    checks : dict
+        All checkboxes
+    table : QLabel
+        Console for displaying all outputs
+    anim : FuncAnimation
+        Animation function for visual plotting
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -36,7 +62,10 @@ class Screen(QtWidgets.QMainWindow):
             ("m", "Mass (kg)", 1.0, 20.0, self.proj.m),
             ("launch_angle", "Angle (°)", -90.0, 90.0, self.proj.launch_angle),
             ("init_altitude", "Altitude (m)", 0.0, 100.0, self.proj.init_altitude),
-            ("spread", "+/-% speed", 0.0, 50.0, 10.0),
+            ("spread", "+/-% Variance", 0.0, 50.0, 10.0),
+            ("l", "Object Length", 0, 5.0, self.proj.l),
+            ("w", "Object Width", 0, 5.0, self.proj.w),
+            ("h", "Object Height", 0, 5.0, self.proj.h)
         ]
 
         grid = QtWidgets.QGridLayout()
@@ -79,8 +108,8 @@ class Screen(QtWidgets.QMainWindow):
         self.table.setStyleSheet("background:#f7f7f7; border:1px solid gray; padding:8px; color:black")
 
         ### buttons and formatting with widgets ###
-        plot_btn = QtWidgets.QPushButton("Plot")
-        plot_btn.clicked.connect(self._refresh)
+        plot_btn = QtWidgets.QPushButton("Animate")
+        plot_btn.clicked.connect(self._animate)
         reset_btn = QtWidgets.QPushButton("Reset")
         reset_btn.clicked.connect(self._reset)
 
@@ -112,6 +141,7 @@ class Screen(QtWidgets.QMainWindow):
         """Set all boxes/sliders back to default."""
         for k, b in self.boxes.items():
             b.setValue(self.defaults[k])
+        self._refresh()
 
     def _run(self, proj, **overrides):
         """Run one simulation with temp parameters (flight_time, (x,y) coords)."""
@@ -125,12 +155,31 @@ class Screen(QtWidgets.QMainWindow):
             setattr(proj, k, v)
         return result
 
+    def _animate(self, *_):
+        self._refresh()
+        x, y = self.proj.xy.copy()
+
+        line = self.ax.lines[-1]
+        line.set_data([], [])
+
+        step = max(1, len(x) // 10)
+
+        def update(i):
+            n = min(i * step + 1, len(x))
+            line.set_data(x[:n], y[:n])
+            return (line,)
+
+        self.anim = FuncAnimation(self.fig, update, frames=len(x)//step + 2, interval=20, repeat=False)
+
     def _refresh(self, *_):
         """Recompute using all sliders.
         
             Runs a no-drag version for info. Additionally run a 9-simulation spread from -x% to +x%.
             Runs nominal simulation last.
         """
+        if getattr(self, "anim", None):
+            if self.anim.event_source is not None:
+                self.anim.event_source.stop()
         for k, b in self.boxes.items():
             if k != "spread":
                 setattr(self.proj, k, round(b.value(), 3))
@@ -153,7 +202,7 @@ class Screen(QtWidgets.QMainWindow):
             dists = np.array([xy[0, -1] for xy in xys])  # (dist,)
             spread_lines = [
                 ("lo", pct, dists[0]), ("hi", pct, dists[-1]),
-                ("span", dists[0], dists[-1]), ("std", dists.std(), times.std())
+                ("span", dists.min(), dists.max()), ("std", dists.std(), times.std())
             ]
 
             # plot sim spread
@@ -190,7 +239,7 @@ class Screen(QtWidgets.QMainWindow):
             "",
             "NO DRAG",
             f"Flight time: {t_nd:10.3f}s",
-            f"Distance x: {d_nd:1.3f}m"
+            f"Distance x: {d_nd:10.3f}m"
         ]
         self.table.setText("\n".join(lines))
 
