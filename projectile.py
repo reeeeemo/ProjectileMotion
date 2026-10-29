@@ -1,7 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import uuid
-from pathlib import Path
 
 class Projectile:
     """2D Projectile Motion calculator.
