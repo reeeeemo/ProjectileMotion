@@ -59,7 +59,7 @@ class Screen(QtWidgets.QMainWindow):
             ("C_drag", "C (drag coef)", 0.0, 2.0, self.proj.C_drag),
             ("rho", "p (kg/m^3)", 0.0, 3.0, self.proj.rho),
             ("init_vel", "Speed (m/s)", 0.0, 100.0, self.proj.init_vel),
-            ("m", "Mass (kg)", 1.0, 20.0, self.proj.m),
+            ("m", "Mass (kg)", 0.1, 20.0, self.proj.m),
             ("launch_angle", "Angle (°)", -90.0, 90.0, self.proj.launch_angle),
             ("init_altitude", "Altitude (m)", 0.0, 100.0, self.proj.init_altitude),
             ("spread", "+/-% Variance", 0.0, 50.0, 10.0),
