@@ -112,13 +112,13 @@ class Projectile:
             v_rel_y = vy + self._wind[1]
             speed = np.sqrt(v_rel_x**2 + v_rel_y**2)
 
-            # accelerations
-            ax = -(drag_x / (2 * self.m)) * speed * v_rel_x
-            ay = -self._g - (drag_y / (2 * self.m)) * speed * v_rel_y
+            # compute velocities with drag (semi-implicit drag integration)
+            kx = (drag_x / (2 * self.m)) * speed * self._dt
+            ky = (drag_y / (2 * self.m)) * speed * self._dt
+            vx = (vx - kx * self._wind[0]) / (1+kx)
+            vy = (vy - self._g * self._dt - ky * self._wind[1]) / (1+ky)
 
-            # update velocities / positions (semi-implciit euler :p)
-            vx += ax * self._dt
-            vy += ay * self._dt
+            # update positions (semi-implciit euler :p)
             px += vx * self._dt
             py += vy * self._dt
 
