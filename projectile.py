@@ -68,6 +68,9 @@ class Projectile:
         
         ### projectile changeable vars ###
         self.m = 5.0
+        self.pressure = 95.0  # kPa
+        self.R = 8.314  # gas constant
+        self.temp = 0  # -30C -> 30C
         self.rho = 1.225
         self.C_drag = 0.5
         self.l = 2.0
@@ -78,6 +81,7 @@ class Projectile:
         self.init_vel = 20.0
         self.launch_angle = 30.0
         self.max_time = 1000
+        self.frame_rate = 60
 
         ### per-iteration variables to output ###
         self.max_time_scaled = max(int(np.ceil(self.max_time / self._dt)) + 1, 2)
@@ -91,11 +95,16 @@ class Projectile:
         ### v0x = v0 * cos0 || v0y = v0 * sin0 ###
         theta = np.radians(self.launch_angle)
         vx, vy = self.init_vel * np.cos(theta), self.init_vel * np.sin(theta)
+        
+        ### compute air density ###
+        self.rho = ((self.pressure * 1000) * 0.029) / (self.R * (self.temp + 273.15))
 
-        ### allocate memory for all variables for euler dynamics ###
-        self._xy[0, :] = (0.0, self.init_altitude)
+        ### release point after one frame of camera lag ###
+        px0 = vx / self.frame_rate
+        py0 = self.init_altitude + vy / self.frame_rate
+        self._xy[0, :] = (px0, py0)
         self._heading[0] = theta
-        px, py, self.elapsed = 0.0, self.init_altitude, 1
+        px, py, self.elapsed = px0, py0, 1
 
         ### semi-implicit euler dynamics for 2d projectile motion ###
         while py >= 0.0 and self.elapsed < self.t.shape[0] - 1:  
@@ -136,6 +145,7 @@ class Projectile:
          ):
         """Plot the most recent trajectory."""
         x, y = self.xy
+
         if clear: 
             ax.clear()
             xpad = max(0.05 * (x.max() - x.min()), 1.0)

@@ -57,7 +57,9 @@ class Screen(QtWidgets.QMainWindow):
         ### inputs: slider and text box per val ###
         inputs = [
             ("C_drag", "C (drag coef)", 0.0, 2.0, self.proj.C_drag),
-            ("rho", "p (kg/m^3)", 0.0, 3.0, self.proj.rho),
+            ("pressure", "Pressure (kPa)", 87.0, 105.0, self.proj.pressure),
+            ("temp", "Temperature (C)", -30, 30, self.proj.temp),
+            ("frame_rate", "Frame Rate", 5.0, 120.0, self.proj.frame_rate),
             ("init_vel", "Speed (m/s)", 0.0, 100.0, self.proj.init_vel),
             ("m", "Mass (kg)", 0.1, 20.0, self.proj.m),
             ("launch_angle", "Angle (°)", -90.0, 90.0, self.proj.launch_angle),
@@ -94,7 +96,7 @@ class Screen(QtWidgets.QMainWindow):
         checks_row = QtWidgets.QHBoxLayout()
         checks_row.addWidget(QtWidgets.QLabel("Applies:"))
         self.checks = {}
-        for key, lbl in [("rho", "p"), ("init_altitude", "Altitude"), ("init_vel", "Speed"), ("launch_angle", "Angle")]:
+        for key, lbl in [("pressure", "p"), ("init_altitude", "Altitude"), ("init_vel", "Speed"), ("launch_angle", "Angle")]:
             cb = QtWidgets.QCheckBox(lbl)
             checks_row.addWidget(cb)
             self.checks[key] = cb
