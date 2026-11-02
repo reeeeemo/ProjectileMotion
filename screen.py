@@ -164,7 +164,7 @@ class Screen(QtWidgets.QMainWindow):
         line = self.ax.lines[-1]
         line.set_data([], [])
 
-        step = max(1, len(x) // 10)
+        step = max(1, len(x) // 100)
 
         def update(i):
             n = min(i * step + 1, len(x))
@@ -186,9 +186,10 @@ class Screen(QtWidgets.QMainWindow):
             if k != "spread":
                 setattr(self.proj, k, round(b.value(), 3))
 
+        # nominal simulation
         t_nd, xy = self._run(self.proj, C_drag=0.0)
         d_nd = xy[0, -1]
-        self.proj.plot(self.fig, self.ax, clear=True, linestyle="dotted")
+        self.proj.plot(self.fig, self.ax, clear=True, linestyle="--")
 
         # simulation spread
         spread_lines = []
@@ -212,7 +213,6 @@ class Screen(QtWidgets.QMainWindow):
             ys = np.array([np.interp(x_common, x, y) for x, y in xys])
             self.ax.fill_between(x_common, ys.min(axis=0), ys.max(axis=0), alpha=0.3)
 
-        # nominal simulation
         self.proj.trajectory()
         t_d, d_d = self.proj.flight_time, self.proj.xy[0][-1]
 
@@ -244,6 +244,12 @@ class Screen(QtWidgets.QMainWindow):
             f"Distance x: {d_nd:10.3f}m"
         ]
         self.table.setText("\n".join(lines))
+
+        ### plot angle + flight path of aerial vehicle ###
+        sx, sy = self.ax.transData.transform([1, 1]) - self.ax.transData.transform([0, 0])
+        x0, y0 = self.proj.xy[:, 0]
+        theta = np.radians(self.proj.launch_angle)
+        self.ax.axline((x0, y0), slope=np.tan(theta), color='g', linestyle=':')
 
         self.proj.plot(self.fig, self.ax, clear=False)
         self.canvas.draw_idle()

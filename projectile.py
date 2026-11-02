@@ -157,6 +157,7 @@ class Projectile:
         ax.scatter(x[0], y[0], c='green')
         ax.scatter(x[-1], y[-1], c='red')
 
+
         ax.set_ylabel("Height (m)")
         ax.set_xlabel("Distance (m)")
         return fig
