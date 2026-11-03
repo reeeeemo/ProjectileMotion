@@ -161,19 +161,8 @@ class Screen(QtWidgets.QMainWindow):
 
     def _animate(self, *_):
         self._refresh()
-        x, y = self.proj.xy.copy()
-
-        line = self.ax.lines[-1]
-        line.set_data([], [])
-
-        step = max(1, len(x) // 100)
-
-        def update(i):
-            n = min(i * step + 1, len(x))
-            line.set_data(x[:n], y[:n])
-            return (line,)
-
-        self.anim = FuncAnimation(self.fig, update, frames=len(x)//step + 2, interval=20, repeat=False)
+        #self.anim = self.jet.animate(self.ax, self.fig)
+        self.anim = self.proj.animate(self.ax, self.fig)
 
     def _target(self, k):
         return self.jet if hasattr(self.jet, k) else self.proj

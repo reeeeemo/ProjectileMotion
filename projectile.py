@@ -1,4 +1,7 @@
 import numpy as np
+from matplotlib.animation import FuncAnimation 
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 class Projectile:
     """2D Projectile Motion calculator.
@@ -134,8 +137,8 @@ class Projectile:
 
     def plot(
             self, 
-            fig, 
-            ax, 
+            fig: Figure,
+            ax: Axes, 
             clear: bool = True, 
             linestyle: str = "solid"
          ):
@@ -157,6 +160,21 @@ class Projectile:
         ax.set_ylabel("Height (m)")
         ax.set_xlabel("Distance (m)")
         return fig
+    
+    def animate(self, ax: Axes, fig: Figure):
+        x, y = self.xy.copy()
+        
+        line = ax.lines[-1]
+        line.set_data([], [])
+        
+        step = max(1, len(x) // 100)
+        
+        def update(i):
+            n = min(i * step + 1, len(x))
+            line.set_data(x[:n], y[:n])
+            return (line,)
+        
+        return FuncAnimation(fig, update, frames=len(x)//step+2, interval=20, repeat=False)
 
     @property
     def flight_time(self):
