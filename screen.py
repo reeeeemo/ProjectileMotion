@@ -7,6 +7,7 @@ from matplotlib.animation import FuncAnimation
 
 from PyQt6 import QtCore, QtWidgets, QtGui
 from projectile import Projectile
+from jet import Jet
 import numpy as np
 
 SCALE = 1000  # 0.001 is 1 tick
@@ -53,17 +54,18 @@ class Screen(QtWidgets.QMainWindow):
             deltatime=0.01,
             wind=np.array([0.0, 0.0], dtype=np.float32)
         )
+        self.jet = Jet(dtype=np.float32)
 
         ### inputs: slider and text box per val ###
         inputs = [
             ("C_drag", "C (drag coef)", 0.0, 2.0, self.proj.C_drag),
             ("pressure", "Pressure (kPa)", 87.0, 105.0, self.proj.pressure),
             ("temp", "Temperature (C)", -30, 30, self.proj.temp),
-            ("frame_rate", "Frame Rate", 5.0, 120.0, self.proj.frame_rate),
-            ("init_vel", "Speed (m/s)", 0.0, 100.0, self.proj.init_vel),
+            ("frame_rate", "Frame Rate", 5.0, 120.0, self.jet.frame_rate),
+            ("init_vel", "Speed (m/s)", 0.0, 100.0, self.jet.init_vel),
             ("m", "Mass (kg)", 0.1, 20.0, self.proj.m),
-            ("launch_angle", "Angle (°)", -90.0, 90.0, self.proj.launch_angle),
-            ("init_altitude", "Altitude (m)", 0.0, 100.0, self.proj.init_altitude),
+            ("launch_angle", "Angle (°)", -90.0, 90.0, self.jet.launch_angle),
+            ("init_altitude", "Altitude (m)", 0.0, 100.0, self.jet.init_altitude),
             ("spread", "+/-% Variance", 0.0, 50.0, 10.0),
             ("l", "Object Length", 0, 5.0, self.proj.l),
             ("w", "Object Width", 0, 5.0, self.proj.w),
@@ -145,16 +147,16 @@ class Screen(QtWidgets.QMainWindow):
             b.setValue(self.defaults[k])
         self._refresh()
 
-    def _run(self, proj, **overrides):
+    def _run(self, **overrides):
         """Run one simulation with temp parameters (flight_time, (x,y) coords)."""
-        saved = {k: getattr(proj, k) for k in overrides}
+        saved = {k: getattr(self._target(k), k) for k in overrides}
         for k, v in overrides.items():
-            setattr(proj, k, v)
+            setattr(self._target(k), k, v)
 
-        proj.trajectory()
-        result = (proj.flight_time, proj.xy.copy())
+        self.proj.trajectory(*self.jet.get_init_pos(), self.jet.init_vel)
+        result = (self.proj.flight_time, self.proj.xy.copy())
         for k, v in saved.items():
-            setattr(proj, k, v)
+            setattr(self._target(k), k, v)
         return result
 
     def _animate(self, *_):
@@ -173,6 +175,9 @@ class Screen(QtWidgets.QMainWindow):
 
         self.anim = FuncAnimation(self.fig, update, frames=len(x)//step + 2, interval=20, repeat=False)
 
+    def _target(self, k):
+        return self.jet if hasattr(self.jet, k) else self.proj
+
     def _refresh(self, *_):
         """Recompute using all sliders.
         
@@ -184,10 +189,10 @@ class Screen(QtWidgets.QMainWindow):
                 self.anim.event_source.stop()
         for k, b in self.boxes.items():
             if k != "spread":
-                setattr(self.proj, k, round(b.value(), 3))
+                setattr(self._target(k), k, round(b.value(), 3))
 
         # nominal simulation
-        t_nd, xy = self._run(self.proj, C_drag=0.0)
+        t_nd, xy = self._run(C_drag=0.0)
         d_nd = xy[0, -1]
         self.proj.plot(self.fig, self.ax, clear=True, linestyle="--")
 
@@ -196,10 +201,12 @@ class Screen(QtWidgets.QMainWindow):
         cb_checks = [key for key, cb in self.checks.items() if cb.isChecked()]
         if len(cb_checks):
             pct = self.boxes["spread"].value()
-            attrs = [(a, getattr(self.proj, a)) for a in cb_checks]
+            attrs = []
+            for a in cb_checks:
+                attrs.append((a, getattr(self._target(a), a)))
             factors = np.linspace(1 - pct / 100, 1 + pct / 100, 9)  # -x% to +x%
             kwargs_list = [{a: v * f for a, v in attrs} for f in factors]
-            samples = [self._run(self.proj, **kw) for kw in kwargs_list]  # (N, (t, xy))
+            samples = [self._run(**kw) for kw in kwargs_list]  # (N, (t, xy))
             times = np.array([t for t, _ in samples])
             xys = [xy for _, xy in samples] # (N, xy)
             dists = np.array([xy[0, -1] for xy in xys])  # (dist,)
@@ -213,7 +220,7 @@ class Screen(QtWidgets.QMainWindow):
             ys = np.array([np.interp(x_common, x, y) for x, y in xys])
             self.ax.fill_between(x_common, ys.min(axis=0), ys.max(axis=0), alpha=0.3)
 
-        self.proj.trajectory()
+        self.proj.trajectory(*self.jet.get_init_pos(), self.jet.init_vel)
         t_d, d_d = self.proj.flight_time, self.proj.xy[0][-1]
 
         def pct_diff(d):
@@ -246,10 +253,7 @@ class Screen(QtWidgets.QMainWindow):
         self.table.setText("\n".join(lines))
 
         ### plot angle + flight path of aerial vehicle ###
-        sx, sy = self.ax.transData.transform([1, 1]) - self.ax.transData.transform([0, 0])
-        x0, y0 = self.proj.xy[:, 0]
-        theta = np.radians(self.proj.launch_angle)
-        self.ax.axline((x0, y0), slope=np.tan(theta), color='g', linestyle=':')
+        self.jet.plot(ax=self.ax)
 
         self.proj.plot(self.fig, self.ax, clear=False)
         self.canvas.draw_idle()
