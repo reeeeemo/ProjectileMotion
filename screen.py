@@ -6,6 +6,7 @@ from matplotlib.figure import Figure
 from matplotlib.animation import FuncAnimation
 
 from PyQt6 import QtCore, QtWidgets, QtGui
+from PyQt6.QtCore import QTimer
 from projectile import Projectile
 from jet import Jet
 import numpy as np
@@ -27,6 +28,8 @@ class Screen(QtWidgets.QMainWindow):
         Matplotlib ax to draw trajectories
     proj : Projectile
         Class to compute Projectile Motion
+    jet : Jet
+        Class to compute jet which drops projectile
     sliders : dict
         All Slider bars
     boxes : dict
@@ -142,6 +145,10 @@ class Screen(QtWidgets.QMainWindow):
         central.setLayout(root)
         self.setCentralWidget(central)
 
+        ### timer for ghost UI ###
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._refresh_ghost)
+
         self._refresh()
 
     def _reset(self, _):
@@ -170,8 +177,12 @@ class Screen(QtWidgets.QMainWindow):
         self.ax.set_xlim(xlim)
         self.ax.set_ylim(ylim)
 
+        (self.ghost,) = self.ax.plot([], [], linestyle=":", color="gray")
         self.anim = self.jet.animate(self.ax, self.fig)
         self.canvas.draw_idle()
+
+        self.timer.start(100)
+        self._refresh_ghost()
 
     def _stop_jet_iteration(self, *_):
         if getattr(self, "anim", None) and self.anim.event_source is not None:
@@ -180,6 +191,26 @@ class Screen(QtWidgets.QMainWindow):
         self._refresh()
         self.anim = self.proj.animate(self.ax, self.fig)
 
+        self.timer.stop()
+
+    def _refresh_ghost(self, *_):
+        """Refresh ghost trajectory (+details) during flight animation."""
+        self.proj.trajectory(*self.jet.get_init_pos(), self.jet.init_vel)
+        self.ghost.set_data(*self.proj.xy)
+
+        jet_pos, _ = self.jet.get_init_pos()
+        t_d, d_d = self.proj.flight_time, self.proj.xy[0][-1] - self.jet.current_xy[0]
+        lines = [
+            "OUTPUTS",
+            "-" * 38,
+            "DRAG",
+            f"Flight time: {t_d:10.3f}s",
+            f"Horizontal Distance: {d_d:10.3f}m",
+            f"Release Pos (x, y): ({jet_pos[0]:.1f}, {jet_pos[1]:.1f})"
+        ]
+
+        self.table.setText("\n".join(lines))
+        self.canvas.draw_idle()
 
     def _target(self, k):
         return self.jet if hasattr(self.jet, k) else self.proj
@@ -190,6 +221,8 @@ class Screen(QtWidgets.QMainWindow):
             Runs a no-drag version for info. Additionally run a 9-simulation spread from -x% to +x%.
             Runs nominal simulation last.
         """
+        ### stop all timers, animations, and set all class vals to box vals ###
+        self.timer.stop()
         if getattr(self, "anim", None) and self.anim.event_source is not None:
             self.anim.event_source.stop()
         for k, b in self.boxes.items():
@@ -198,12 +231,12 @@ class Screen(QtWidgets.QMainWindow):
 
         x_rel = self.jet.current_xy[0]
 
-        # nominal simulation
+        ### plot no-drag simulation (nominal) ###
         t_nd, xy = self._run(C_drag=0.0)
         d_nd = xy[0, -1] - x_rel
         self.proj.plot(self.fig, self.ax, clear=True, linestyle="--")
 
-        # simulation spread
+        ### plot simulation spread ###
         spread_lines = []
         cb_checks = [key for key, cb in self.checks.items() if cb.isChecked()]
         if len(cb_checks):
@@ -227,19 +260,23 @@ class Screen(QtWidgets.QMainWindow):
             ys = np.array([np.interp(x_common, x, y) for x, y in xys])
             self.ax.fill_between(x_common, ys.min(axis=0), ys.max(axis=0), alpha=0.3)
 
-        self.proj.trajectory(*self.jet.get_init_pos(), self.jet.init_vel)
+        ### get all data for drag trajectory
+        jet_pos, jet_head = self.jet.get_init_pos()
+        self.proj.trajectory(jet_pos, jet_head, self.jet.init_vel)
         t_d, d_d = self.proj.flight_time, self.proj.xy[0][-1] - x_rel
 
         def pct_diff(d):
             """Compute difference (%) between given xy displacement and nominal xy displacement."""
             return 100 * (d - d_d) / d_d if abs(d_d) > 1e-9 else float("nan")
 
+        ### add data to console ###
         lines = [
             "OUTPUTS",
             "-" * 38,
             "DRAG",
             f"Flight time: {t_d:10.3f}s",
-            f"Horizontal Distance: {d_d:10.3f}m"
+            f"Horizontal Distance: {d_d:10.3f}m",
+            f"Release Pos (x, y): ({jet_pos[0]:.1f}, {jet_pos[1]:.1f})"
         ]
         for item in spread_lines:
             if item[0] == "lo":
@@ -261,7 +298,6 @@ class Screen(QtWidgets.QMainWindow):
 
         ### plot angle + flight path of aerial vehicle ###
         self.jet.plot(ax=self.ax)
-
         self.proj.plot(self.fig, self.ax, clear=False)
 
         self.ax.relim()

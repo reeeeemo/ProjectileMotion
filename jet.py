@@ -6,7 +6,27 @@ from matplotlib.animation import FuncAnimation
 class Jet:
     """Representation of a jet on a linear flight path.
     
-    
+        Parameters
+        ----------
+        dtype : type
+            Precision value to use for calculations
+        
+        Attributes
+        ----------
+        launch_angle : float
+            Initial launched angle of object in degrees
+        init_vel : float
+            Initial velocity of launched object
+        frame_rate : int
+            Frame rate of camera for buffer
+        init_altitude : float
+            Initial altitude of launched object
+        dtype : type
+            Precision value to use for calculations
+        init_x : float
+            Initial horizontal position of Jet
+        current_xy : list
+            Current (x, y) position of Jet
     """
     def __init__(self, dtype: type):
         self.launch_angle = 30.0

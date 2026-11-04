@@ -39,12 +39,6 @@ class Projectile:
             Height of object
         w : float
             Width of object
-        init_altitude : float
-            Initial altitude of launched object
-        init_vel : float
-            Initial velocity of launched object
-        launch_angle : float
-            Initial launched angle of object in degrees
         max_time : int
             Time frame to drop object before early cutoff
         xy : np.ndarray
