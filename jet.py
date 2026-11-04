@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.animation import FuncAnimation
@@ -16,6 +15,9 @@ class Jet:
         self.init_altitude = 50.0
         self.dtype = dtype
 
+        self.init_x = 0.0
+        self.current_xy = [0.0, 0.0]
+
     def plot(self, ax):
         xy0, theta = self.get_init_pos()
         ax.axline((xy0[0], xy0[1]), slope=np.tan(theta), color='g', linestyle=':')
@@ -31,9 +33,7 @@ class Jet:
         def inside(x, y):
             return xmin <= x <= xmax and ymin <= y <= ymax
         
-        x0, y0 = xy0
-        while inside(x0 - dx, y0 - dy):
-            x0, y0 = x0 - dx, y0 - dy
+        x0, y0 = 0.0, self.init_altitude
         
         x, y = [x0], [y0]
         while inside(x[-1] + dx, y[-1] + dy):
@@ -43,16 +43,21 @@ class Jet:
         jet, = ax.plot([], [], 'go')
         
         def update(i):
+            self.current_xy = (x[i], y[i])
+            self.init_x = x[i]
             jet.set_data([x[i]], [y[i]])
             return (jet,)
 
         return FuncAnimation(fig, update, frames=len(x), interval=1000 / self.frame_rate)
-            
+
+    def reset(self):
+        self.current_xy = [0.0, 0.0]
+        self.init_x = 0.0
 
     def get_init_pos(self):
         """Return (xy, angle (radians))"""
         theta = np.radians(self.launch_angle)
         return np.array([
-                self.init_vel * np.cos(theta) / self.frame_rate,
-                self.init_altitude + ((self.init_vel * np.sin(theta)) / self.frame_rate)
+                self.init_x + self.init_vel * np.cos(theta) / self.frame_rate,
+                self.init_altitude + (self.init_x * np.tan(theta)) + ((self.init_vel * np.sin(theta)) / self.frame_rate)
             ], dtype=self.dtype), theta

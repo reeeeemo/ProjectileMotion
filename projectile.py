@@ -98,9 +98,6 @@ class Projectile:
         self.rho = ((self.pressure * 1000) * 0.029) / (self.R * (self.temp + 273.15))
 
         ### release point after one frame of camera lag ###
-        #px0 = vx / self.frame_rate
-        #py0 = self.init_altitude + vy / self.frame_rate
-        #self._xy[0, :] = (px0, py0)
         self._xy[0, :] = init_xy
         self._heading[0] = theta
         px, py, self.elapsed = init_xy[0], init_xy[1], 1
@@ -147,10 +144,6 @@ class Projectile:
 
         if clear: 
             ax.clear()
-            xpad = max(0.05 * (x.max() - x.min()), 1.0)
-            ypad = max(0.1 * (y.max() - y.min()), 1.0)
-            ax.set_xlim(x.min() - xpad, x.max() + xpad)
-            ax.set_ylim(min(0, y.min()), y.max() + ypad)
 
         ax.plot(x, y, linestyle=linestyle)
         ax.scatter(x[0], y[0], c='green')

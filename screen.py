@@ -62,7 +62,7 @@ class Screen(QtWidgets.QMainWindow):
             ("pressure", "Pressure (kPa)", 87.0, 105.0, self.proj.pressure),
             ("temp", "Temperature (C)", -30, 30, self.proj.temp),
             ("frame_rate", "Frame Rate", 5.0, 120.0, self.jet.frame_rate),
-            ("init_vel", "Speed (m/s)", 0.0, 100.0, self.jet.init_vel),
+            ("init_vel", "Speed (m/s)", 1.0, 100.0, self.jet.init_vel),
             ("m", "Mass (kg)", 0.1, 20.0, self.proj.m),
             ("launch_angle", "Angle (°)", -90.0, 90.0, self.jet.launch_angle),
             ("init_altitude", "Altitude (m)", 0.0, 100.0, self.jet.init_altitude),
@@ -112,8 +112,10 @@ class Screen(QtWidgets.QMainWindow):
         self.table.setStyleSheet("background:#f7f7f7; border:1px solid gray; padding:8px; color:black")
 
         ### buttons and formatting with widgets ###
-        plot_btn = QtWidgets.QPushButton("Animate")
-        plot_btn.clicked.connect(self._animate)
+        plot_btn = QtWidgets.QPushButton("Start Jet")
+        plot_btn.clicked.connect(self._run_jet_iteration)
+        shoot_proj_btn = QtWidgets.QPushButton("Shoot Projectile")
+        shoot_proj_btn.clicked.connect(self._stop_jet_iteration)
         reset_btn = QtWidgets.QPushButton("Reset")
         reset_btn.clicked.connect(self._reset)
 
@@ -123,6 +125,7 @@ class Screen(QtWidgets.QMainWindow):
 
         buttons = QtWidgets.QVBoxLayout()
         buttons.addWidget(plot_btn)
+        buttons.addWidget(shoot_proj_btn)
         buttons.addWidget(reset_btn)
         buttons.addStretch()
 
@@ -145,6 +148,8 @@ class Screen(QtWidgets.QMainWindow):
         """Set all boxes/sliders back to default."""
         for k, b in self.boxes.items():
             b.setValue(self.defaults[k])
+
+        self.jet.reset()
         self._refresh()
 
     def _run(self, **overrides):
@@ -159,10 +164,22 @@ class Screen(QtWidgets.QMainWindow):
             setattr(self._target(k), k, v)
         return result
 
-    def _animate(self, *_):
+    def _run_jet_iteration(self, *_):
+        xlim, ylim = self.ax.get_xlim(), self.ax.get_ylim()
+        self.ax.clear()
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+
+        self.anim = self.jet.animate(self.ax, self.fig)
+        self.canvas.draw_idle()
+
+    def _stop_jet_iteration(self, *_):
+        if getattr(self, "anim", None) and self.anim.event_source is not None:
+            self.anim.event_source.stop()
+
         self._refresh()
-        #self.anim = self.jet.animate(self.ax, self.fig)
         self.anim = self.proj.animate(self.ax, self.fig)
+
 
     def _target(self, k):
         return self.jet if hasattr(self.jet, k) else self.proj
@@ -173,16 +190,17 @@ class Screen(QtWidgets.QMainWindow):
             Runs a no-drag version for info. Additionally run a 9-simulation spread from -x% to +x%.
             Runs nominal simulation last.
         """
-        if getattr(self, "anim", None):
-            if self.anim.event_source is not None:
-                self.anim.event_source.stop()
+        if getattr(self, "anim", None) and self.anim.event_source is not None:
+            self.anim.event_source.stop()
         for k, b in self.boxes.items():
             if k != "spread":
                 setattr(self._target(k), k, round(b.value(), 3))
 
+        x_rel = self.jet.current_xy[0]
+
         # nominal simulation
         t_nd, xy = self._run(C_drag=0.0)
-        d_nd = xy[0, -1]
+        d_nd = xy[0, -1] - x_rel
         self.proj.plot(self.fig, self.ax, clear=True, linestyle="--")
 
         # simulation spread
@@ -198,19 +216,19 @@ class Screen(QtWidgets.QMainWindow):
             samples = [self._run(**kw) for kw in kwargs_list]  # (N, (t, xy))
             times = np.array([t for t, _ in samples])
             xys = [xy for _, xy in samples] # (N, xy)
-            dists = np.array([xy[0, -1] for xy in xys])  # (dist,)
+            dists = np.array([xy[0, -1] for xy in xys]) - x_rel  # (dist,)
             spread_lines = [
                 ("lo", pct, dists[0]), ("hi", pct, dists[-1]),
                 ("span", dists.min(), dists.max()), ("std", dists.std(), times.std())
             ]
 
             # plot sim spread
-            x_common = np.linspace(0, max(x.max() for x, _ in xys), 300)
+            x_common = np.linspace(min(x.min() for x, _ in xys), max(x.max() for x, _ in xys), 300)
             ys = np.array([np.interp(x_common, x, y) for x, y in xys])
             self.ax.fill_between(x_common, ys.min(axis=0), ys.max(axis=0), alpha=0.3)
 
         self.proj.trajectory(*self.jet.get_init_pos(), self.jet.init_vel)
-        t_d, d_d = self.proj.flight_time, self.proj.xy[0][-1]
+        t_d, d_d = self.proj.flight_time, self.proj.xy[0][-1] - x_rel
 
         def pct_diff(d):
             """Compute difference (%) between given xy displacement and nominal xy displacement."""
@@ -245,4 +263,9 @@ class Screen(QtWidgets.QMainWindow):
         self.jet.plot(ax=self.ax)
 
         self.proj.plot(self.fig, self.ax, clear=False)
+
+        self.ax.relim()
+        self.ax.autoscale(enable=True)
+        self.ax.set_xlim(left=0)
+        self.ax.set_ylim(bottom=0)
         self.canvas.draw_idle()
