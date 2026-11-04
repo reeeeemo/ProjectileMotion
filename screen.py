@@ -77,7 +77,9 @@ class Screen(QtWidgets.QMainWindow):
 
         grid = QtWidgets.QGridLayout()
         self.sliders, self.boxes, self.defaults = {}, {}, {}
-        for row, (key, lbl, lo, hi, init) in enumerate(inputs):
+        per_col = 4
+        for i, (key, lbl, lo, hi, init) in enumerate(inputs):
+            row, col = i % per_col, (i // per_col) * 3
             s = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
             s.setRange(round(lo * SCALE), round(hi * SCALE))
             s.setValue(round(init * SCALE))
@@ -92,9 +94,9 @@ class Screen(QtWidgets.QMainWindow):
             s.sliderReleased.connect(self._refresh)
             box.editingFinished.connect(self._refresh)
 
-            grid.addWidget(QtWidgets.QLabel(lbl), row, 0)
-            grid.addWidget(s, row, 1)
-            grid.addWidget(box, row, 2)
+            grid.addWidget(QtWidgets.QLabel(lbl), row, col)
+            grid.addWidget(s, row, col+1)
+            grid.addWidget(box, row, col+2)
             self.sliders[key], self.boxes[key], self.defaults[key] = s, box, init
 
         ### add std-dev checkboxes ###
